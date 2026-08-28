@@ -10,11 +10,7 @@ services:
       # - /etc/localtime:/etc/localtime:ro
       # - /etc/timezone:/etc/timezone:ro
     environment:
-      # 草稿下载URL
-      - DRAFT_URL=http://127.0.0.1/openapi/capcut-mate/v1/get_draft
-      # 用于将容器内部的文件路径转成URL，本质是将/app/替换成DOWNLOAD_URL得到下载路径
-      - DOWNLOAD_URL=http://127.0.0.1/
-      # 草稿提示URL
+      # Public base URL used to build draft and rendered-file URLs.
       - SELF_HOST_BASE_URL=http://localhost
       - ENABLE_APIKEY=false
       - STORAGE_BACKEND=local
