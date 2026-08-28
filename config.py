@@ -7,6 +7,8 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # 保存剪映草稿的目录
 DRAFT_DIR = os.path.join(PROJECT_ROOT, "output", "draft")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
+SELF_HOST_BASE_URL = os.getenv("SELF_HOST_BASE_URL", "http://127.0.0.1:30000").rstrip("/")
 
 # 日志目录
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
@@ -21,13 +23,13 @@ VIDEO_GEN_TASK_DB_PATH = os.path.join(PROJECT_ROOT, "db", "video_gen_tasks.sqlit
 VIDEO_GEN_RETENTION_DAYS = max(1, int(os.getenv("VIDEO_GEN_RETENTION_DAYS", "7")))
 
 # 剪映草稿的下载路径
-DRAFT_URL = os.getenv("DRAFT_URL", "https://capcut-mate.jcaigc.cn/openapi/capcut-mate/v1/get_draft")
+DRAFT_URL = os.getenv("DRAFT_URL", f"{SELF_HOST_BASE_URL}/openapi/capcut-mate/v1/get_draft")
 
-# 将容器内的文件路径转成一个下载路径，执行替换操作，即将/app/ -> https://capcut-mate.jcaigc.cn/
-DOWNLOAD_URL = os.getenv("DOWNLOAD_URL", "https://capcut-mate.jcaigc.cn/")
+# Public URL prefix used for self-hosted draft/material downloads.
+DOWNLOAD_URL = os.getenv("DOWNLOAD_URL", f"{SELF_HOST_BASE_URL}/files")
 
 # 草稿提示URL
-TIP_URL = os.getenv("TIP_URL", "https://docs.jcaigc.cn/")
+TIP_URL = os.getenv("TIP_URL", "")
 
 # 贴纸配置文件路径
 STICKER_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "sticker.json")
@@ -40,7 +42,10 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "template")
 
 # 剪映草稿保存路径（下载剪映草稿保存位置）-- 云渲染必需配置
 #DRAFT_SAVE_PATH = "C:/Users/Administrator/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"
-DRAFT_SAVE_PATH = "C:/Users/1/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"
+DRAFT_SAVE_PATH = os.getenv("DRAFT_SAVE_PATH", "C:/Users/1/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft")
+
+STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local").strip().lower()
+LOCAL_STORAGE_DIR = os.getenv("LOCAL_STORAGE_DIR", os.path.join(OUTPUT_DIR, "rendered"))
 
 # 腾讯云对象存储配置（优先）
 COS_SECRET_ID = os.getenv("COS_SECRET_ID", "")
@@ -77,7 +82,7 @@ TOS_ENDPOINT = os.getenv("TOS_ENDPOINT", "")
 STORAGE_UPLOAD_PREFIX = os.getenv("STORAGE_UPLOAD_PREFIX", "")
 
 # APIKEY启用配置-默认启用 -- 云渲染必需配置（环境变量 true / false，大小写不敏感）
-ENABLE_APIKEY = os.getenv("ENABLE_APIKEY", "true").strip().lower() == "true"
+ENABLE_APIKEY = os.getenv("ENABLE_APIKEY", "false").strip().lower() == "true"
 
 # 文件下载大小限制（字节），默认200MB
 DOWNLOAD_FILE_SIZE_LIMIT = int(os.getenv("DOWNLOAD_FILE_SIZE_LIMIT", str(200 * 1024 * 1024)))

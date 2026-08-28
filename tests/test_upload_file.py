@@ -15,6 +15,7 @@ def upload_mocks():
         patch("src.utils.upload_file._is_cos_configured") as m_ic,
         patch("src.utils.upload_file._is_oss_configured") as m_io,
         patch("src.utils.upload_file._is_tos_configured") as m_it,
+        patch("config.STORAGE_BACKEND", "auto"),
     ):
         yield m_cos, m_oss, m_tos, m_ic, m_io, m_it
 

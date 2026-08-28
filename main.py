@@ -2,6 +2,9 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import os
+import config
 from src.router import v1_router
 from src.utils.draft_downloader import download_draft
 from src.utils.logger import logger
@@ -26,6 +29,8 @@ async def lifespan(app: FastAPI):
 
 # 1. 创建 FastAPI 应用
 app: FastAPI = FastAPI(title="CapCut Mate API", version="1.0", lifespan=lifespan)
+os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+app.mount("/files", StaticFiles(directory=config.OUTPUT_DIR), name="self-hosted-files")
 
 # 2. 注册路由
 app.include_router(router=v1_router, prefix="/openapi/capcut-mate", tags=["capcut-mate"])

@@ -6,7 +6,9 @@ from src.utils.logger import logger
 import requests
 
 # 常量定义
-POINTS_API_BASE_URL = "https://jcaigc.cn/openapi/v1/user/points"
+import os
+
+POINTS_API_BASE_URL = os.getenv("POINTS_API_BASE_URL", "")
 API_HEADERS = {
     'User-Agent': 'CapcutMate/1.0',
     'Accept': 'application/json',
@@ -154,6 +156,11 @@ def _call_user_api(method: str, endpoint: str, params: Optional[dict] = None, js
     Raises:
         CustomException: 当API调用失败或返回错误时
     """
+    if not POINTS_API_BASE_URL:
+        raise CustomException(
+            CustomError.INTERNAL_SERVER_ERROR,
+            detail="POINTS_API_BASE_URL is not configured",
+        )
     url = f"{POINTS_API_BASE_URL}{endpoint}"
     max_attempts = USER_API_RETRY_ATTEMPTS + 1
 

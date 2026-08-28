@@ -19,8 +19,16 @@ Environment:
 
 ```text
 CAPCUT_MATE_BASE_URL=http://windows-render-node:30000
-CAPCUT_MATE_API_KEY=<secret when ENABLE_APIKEY=true>
+CAPCUT_MATE_API_KEY=
+ENABLE_APIKEY=false
+STORAGE_BACKEND=local
+SELF_HOST_BASE_URL=https://capcut-mate.example.com
 ```
+
+The production path does not require jcaigc.cn. Run this fork on the Windows
+render node with Jianying installed and signed in. The self-hosted API creates
+the timeline, `gen_video` drives Jianying, and `gen_video_status.video_url`
+points to this instance's `/files/rendered/` path.
 
 All acquired materials default to `rights_status=pending`. A rendered file is
 not eligible for publishing until both rights clearance and human approval are

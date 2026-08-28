@@ -16,7 +16,7 @@ def gen_download_url(file_path: str) -> str:
         download_url: 下载URL
     """
     try:
-        relative_path = os.path.relpath(file_path, config.PROJECT_ROOT)
+        relative_path = os.path.relpath(file_path, config.OUTPUT_DIR)
     except ValueError:
         # 如果路径不在同一驱动器等情况
         relative_path = file_path
@@ -77,4 +77,3 @@ def get_draft(draft_id: str) -> List[str]:
 
     logger.info(f"get draft success: {draft_id}, download urls: {download_urls}")
     return download_urls
-

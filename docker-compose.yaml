@@ -15,7 +15,10 @@ services:
       # 用于将容器内部的文件路径转成URL，本质是将/app/替换成DOWNLOAD_URL得到下载路径
       - DOWNLOAD_URL=http://127.0.0.1/
       # 草稿提示URL
-      - TIP_URL=https://docs.jcaigc.cn
+      - SELF_HOST_BASE_URL=http://localhost
+      - ENABLE_APIKEY=false
+      - STORAGE_BACKEND=local
+      - TIP_URL=
       # 文件下载大小限制（字节），默认200MB（209715200）
       - DOWNLOAD_FILE_SIZE_LIMIT=209715200
     networks:

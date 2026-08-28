@@ -1,5 +1,9 @@
 # 对象存储统一上传入口（配置判断 + 路由分发；具体上传与重试在 cos/oss/tos + storage_upload_retry）
 from typing import Optional
+from datetime import datetime, timezone
+from pathlib import Path
+import shutil
+import uuid
 
 import config
 from exceptions import CustomError, CustomException
@@ -53,25 +57,40 @@ def upload_file(file_path: str, expire_days: Optional[int] = None) -> str:
     """
     上传文件到对象存储并返回带签名的临时URL。
 
-    选择策略：
-    1. 若 COS 配置完整，优先使用 COS
-    2. 否则若 OSS 配置完整，使用 OSS
-    3. 否则若 TOS 配置完整，使用 TOS
-    4. 都未配置时抛出异常
+    Self-hosted default: copy into FastAPI's /files tree. Cloud object
+    storage remains available only when explicitly selected.
     """
     if expire_days is None:
         expire_days = config.VIDEO_GEN_RETENTION_DAYS
 
     try:
-        if _is_cos_configured():
+        if config.STORAGE_BACKEND == "local":
+            source = Path(file_path)
+            if not source.is_file():
+                raise FileNotFoundError(file_path)
+            date_dir = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            target_dir = Path(config.LOCAL_STORAGE_DIR) / date_dir
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / f"{uuid.uuid4().hex}{source.suffix or '.mp4'}"
+            shutil.copy2(source, target)
+            relative = target.relative_to(Path(config.OUTPUT_DIR)).as_posix()
+            return f"{config.SELF_HOST_BASE_URL}/files/{relative}"
+
+        if config.STORAGE_BACKEND not in {"auto", "cos", "oss", "tos"}:
+            raise CustomException(
+                CustomError.INTERNAL_SERVER_ERROR,
+                f"Unsupported STORAGE_BACKEND: {config.STORAGE_BACKEND}",
+            )
+
+        if config.STORAGE_BACKEND in {"auto", "cos"} and _is_cos_configured():
             logger.info("Detected COS config, using COS upload")
             return cos_upload_file(file_path=file_path, expire_days=expire_days)
 
-        if _is_oss_configured():
+        if config.STORAGE_BACKEND in {"auto", "oss"} and _is_oss_configured():
             logger.info("COS config not found, fallback to OSS upload")
             return oss_upload_file(file_path=file_path, expire_days=expire_days)
 
-        if _is_tos_configured():
+        if config.STORAGE_BACKEND in {"auto", "tos"} and _is_tos_configured():
             logger.info("COS/OSS config not found, fallback to TOS upload")
             return tos_upload_file(file_path=file_path, expire_days=expire_days)
 
