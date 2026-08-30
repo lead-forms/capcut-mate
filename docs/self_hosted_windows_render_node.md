@@ -31,6 +31,8 @@ uv sync --extra windows
 
 ```powershell
 $env:SELF_HOST_BASE_URL="https://capcut-mate.example.com"
+$env:SERVER_HOST="127.0.0.1"
+$env:SERVER_PORT="30000"
 $env:DRAFT_SAVE_PATH="$env:LOCALAPPDATA\JianyingPro\User Data\Projects\com.lveditor.draft"
 $env:ENABLE_APIKEY="false"
 $env:STORAGE_BACKEND="local"
@@ -41,6 +43,10 @@ Set `SELF_HOST_BASE_URL` to the private/public HTTPS address that AI
 Dropshipping Gem can reach. Protect that address at the network or reverse
 proxy layer; disabling the third-party billing key is not an instruction to
 expose the renderer openly.
+
+The server binds to `127.0.0.1:30000` by default. Keep this localhost-only
+setting for initial rendering tests. Set `SERVER_HOST` to another interface
+only after authentication and network access controls are enabled.
 
 ## Completion check
 

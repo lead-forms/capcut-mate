@@ -105,3 +105,81 @@ class TestExistsWithComRetry:
             )
 
         assert control.Exists.call_count == 2
+
+
+class TestInlineExportOverlay:
+    def test_detects_jianying_11_export_button(self) -> None:
+        ctrl = JianyingController.__new__(JianyingController)
+        ctrl.app = MagicMock()
+        export_button = MagicMock()
+        export_button.Exists.return_value = True
+        ctrl.app.TextControl.return_value = export_button
+
+        assert ctrl._main_window_has_export_overlay() is True
+
+    def test_returns_false_when_no_export_markers_exist(self) -> None:
+        ctrl = JianyingController.__new__(JianyingController)
+        ctrl.app = MagicMock()
+        marker = MagicMock()
+        marker.Exists.return_value = False
+        ctrl.app.TextControl.return_value = marker
+
+        assert ctrl._main_window_has_export_overlay() is False
+
+
+class TestExportWindowCmp:
+    def test_matches_jianying_11_draft_specific_title(self) -> None:
+        control = MagicMock()
+        type(control).Name = PropertyMock(return_value="导出-2026082916002578f01f7a")
+        type(control).ClassName = PropertyMock(return_value="ExportWindow_QMLTYPE_1568")
+
+        assert JianyingController._export_window_cmp(control, 1) is True
+
+    def test_rejects_unrelated_child_window(self) -> None:
+        control = MagicMock()
+        type(control).Name = PropertyMock(return_value="JianyingPro")
+        type(control).ClassName = PropertyMock(return_value="EditPanel_QMLTYPE_694")
+
+        assert JianyingController._export_window_cmp(control, 1) is False
+
+
+class TestExportButtonFallback:
+    def test_uses_jianying_11_editor_export_button(self) -> None:
+        ctrl = JianyingController.__new__(JianyingController)
+        app = MagicMock()
+        ctrl.app = app
+        old_text = MagicMock()
+        old_text.Exists.return_value = False
+        new_button = MagicMock()
+        new_button.Exists.return_value = True
+        app.TextControl.return_value = old_text
+        app.ButtonControl.return_value = new_button
+
+        with patch("src.pyJianYingDraft.jianying_controller.time.sleep"):
+            ctrl.click_export_button()
+
+        app.ButtonControl.assert_called_once_with(
+            searchDepth=1,
+            AutomationId="editor.export",
+        )
+        new_button.Click.assert_called_once_with(simulateMove=False)
+
+
+class TestDraftTitleMatcher:
+    @staticmethod
+    def _control(description: str):
+        control = MagicMock()
+        control.GetPropertyValue.return_value = description
+        return control
+
+    def test_matches_full_name(self) -> None:
+        matcher = JianyingController._draft_title_matcher("2026082917424996584d4c")
+        assert matcher(self._control("HomePageDraftTitle:2026082917424996584d4c"), 2)
+
+    def test_matches_jianying_11_ellipsized_name(self) -> None:
+        matcher = JianyingController._draft_title_matcher("2026082917424996584d4c")
+        assert matcher(self._control("HomePageDraftTitle:202608...584d4c"), 2)
+
+    def test_rejects_different_ellipsized_name(self) -> None:
+        matcher = JianyingController._draft_title_matcher("2026082917424996584d4c")
+        assert not matcher(self._control("HomePageDraftTitle:202608...f01f7a"), 2)

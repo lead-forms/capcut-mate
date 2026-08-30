@@ -9,6 +9,8 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 DRAFT_DIR = os.path.join(PROJECT_ROOT, "output", "draft")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 SELF_HOST_BASE_URL = os.getenv("SELF_HOST_BASE_URL", "http://127.0.0.1:30000").rstrip("/")
+SERVER_HOST = os.getenv("SERVER_HOST", "127.0.0.1").strip() or "127.0.0.1"
+SERVER_PORT = int(os.getenv("SERVER_PORT", "30000"))
 
 # 日志目录
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
@@ -41,8 +43,11 @@ HUAZI_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "huazi.jso
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "template")
 
 # 剪映草稿保存路径（下载剪映草稿保存位置）-- 云渲染必需配置
-#DRAFT_SAVE_PATH = "C:/Users/Administrator/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft"
-DRAFT_SAVE_PATH = os.getenv("DRAFT_SAVE_PATH", "C:/Users/1/AppData/Local/JianyingPro/User Data/Projects/com.lveditor.draft")
+_local_app_data = os.getenv("LOCALAPPDATA", os.path.expanduser("~/AppData/Local"))
+DRAFT_SAVE_PATH = os.getenv(
+    "DRAFT_SAVE_PATH",
+    os.path.join(_local_app_data, "JianyingPro", "User Data", "Projects", "com.lveditor.draft"),
+)
 
 STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "local").strip().lower()
 LOCAL_STORAGE_DIR = os.getenv("LOCAL_STORAGE_DIR", os.path.join(OUTPUT_DIR, "rendered"))

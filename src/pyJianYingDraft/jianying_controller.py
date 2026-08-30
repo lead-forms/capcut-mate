@@ -13,6 +13,7 @@
 """剪映自动化控制，主要与自动导出有关"""
 
 import _ctypes
+import json
 import os
 import time
 import shutil
@@ -332,9 +333,14 @@ class JianyingController:
                 # 点击对应草稿
                 draft_name_text = self.app.TextControl(
                     searchDepth=2,
-                    Compare=ControlFinder.desc_matcher(f"HomePageDraftTitle:{draft_name}", exact=True)
+                    Compare=self._draft_title_matcher(draft_name),
                 )
                 if not draft_name_text.Exists(0):
+                    if draft_dir and self._click_draft_card_from_root_meta(draft_name, draft_dir):
+                        time.sleep(10)
+                        self.get_window()
+                        if self.app_status == "edit":
+                            return
                     raise exceptions.DraftNotFound(f"未找到名为{draft_name}的剪映草稿")
                 draft_btn = draft_name_text.GetParentControl()
                 assert draft_btn is not None
@@ -363,6 +369,74 @@ class JianyingController:
         # 所有重试都失败，抛出异常
         raise last_exception
 
+    def _click_draft_card_from_root_meta(self, draft_name: str, draft_dir: str) -> bool:
+        """Open a Jianying 11 card when QML does not expose its text to UIA."""
+        root_dir = os.path.dirname(os.path.normpath(draft_dir))
+        meta_path = os.path.join(root_dir, "root_meta_info.json")
+        try:
+            with open(meta_path, "r", encoding="utf-8") as handle:
+                stores = json.load(handle).get("all_draft_store", [])
+        except (OSError, json.JSONDecodeError, AttributeError) as exc:
+            logger.warning("Cannot read Jianying root metadata for card fallback: %s", exc)
+            return False
+
+        visible = [
+            item for item in stores
+            if isinstance(item, dict)
+            and not item.get("draft_is_invisible", False)
+            and os.path.isdir(str(item.get("draft_fold_path") or ""))
+            and not str(item.get("draft_name") or "").endswith(".tmp")
+        ]
+        visible.sort(key=lambda item: int(item.get("tm_draft_modified") or 0), reverse=True)
+        index = next(
+            (i for i, item in enumerate(visible) if item.get("draft_name") == draft_name),
+            None,
+        )
+        if index is None:
+            logger.warning("Draft is absent from Jianying root metadata: %s", draft_name)
+            return False
+
+        rect = self.app.BoundingRectangle
+        card_width = 112
+        columns = max(1, (int(rect.right - rect.left) - 240) // card_width)
+        x = int(rect.left) + 295 + (index % columns) * card_width
+        # Use the top edge: Jianying's UIA bottom coordinate is DPI-scaled on
+        # 125% Windows displays while pyautogui consumes logical coordinates.
+        # The first row is stable at y=605 in the window client area.
+        y = int(rect.top) + 605 + (index // columns) * 140
+        logger.warning(
+            "Draft title unavailable in UIA tree; clicking indexed home card: "
+            "name=%s index=%d columns=%d x=%d y=%d",
+            draft_name,
+            index,
+            columns,
+            x,
+            y,
+        )
+        pyautogui.click(x=x, y=y, button="left")
+        return True
+
+    @staticmethod
+    def _draft_title_matcher(draft_name: str) -> Callable[[uia.Control, int], bool]:
+        """Match full and Jianying 11 ellipsized draft-card descriptions."""
+        prefix = "HomePageDraftTitle:"
+
+        def matcher(control: uia.Control, depth: int) -> bool:
+            if depth != 2:
+                return False
+            description = str(control.GetPropertyValue(30159) or "")
+            if not description.startswith(prefix):
+                return False
+            visible_name = description[len(prefix):]
+            if visible_name == draft_name:
+                return True
+            if "..." not in visible_name:
+                return False
+            visible_prefix, visible_suffix = visible_name.split("...", 1)
+            return draft_name.startswith(visible_prefix) and draft_name.endswith(visible_suffix)
+
+        return matcher
+
     def click_export_button(self) -> None:
         """点击编辑页面的导出按钮
         
@@ -371,8 +445,20 @@ class JianyingController:
         """
         export_btn = self.app.TextControl(searchDepth=2, Compare=ControlFinder.desc_matcher("MainWindowTitleBarExportBtn"))
         if not export_btn.Exists(0):
-            raise AutomationError("未在编辑窗口中找到导出按钮")
-        export_btn.Click(simulateMove=False)
+            # Jianying 11 exposes the title-bar button itself with this stable
+            # automation id even when the nested text node is not yet ready.
+            export_btn = self.app.ButtonControl(
+                searchDepth=1,
+                AutomationId="editor.export",
+            )
+        if not export_btn.Exists(2, 0.5):
+            # Jianying 11's QML accessibility subtree is occasionally absent.
+            # The export button remains anchored to the top-right of MainWindow.
+            logger.warning("Export button missing from UIA tree; using window-relative click")
+            screen_width, _ = pyautogui.size()
+            pyautogui.click(x=screen_width - 135, y=18, button="left")
+        else:
+            export_btn.Click(simulateMove=False)
         time.sleep(10)
         self.get_window()
 
@@ -388,10 +474,17 @@ class JianyingController:
         # 获取原始导出路径（带后缀名）
         export_path_sib = self.app.TextControl(searchDepth=2, Compare=ControlFinder.desc_matcher("ExportPath"))
         if not export_path_sib.Exists(0):
-            raise AutomationError("未找到导出路径框")
+            draft_name = getattr(self, "_current_draft_name", "")
+            if not draft_name:
+                raise AutomationError("未找到导出路径框")
+            export_path = os.path.join(os.path.expanduser("~/Videos"), f"{draft_name}.mp4")
+            logger.warning("Export path missing from UIA tree; using Jianying default: %s", export_path)
+            self._expected_export_path = export_path
+            return export_path
         export_path_text = export_path_sib.GetSiblingControl(lambda ctrl: True)
         assert export_path_text is not None
         export_path = export_path_text.GetPropertyValue(30159)
+        self._expected_export_path = export_path
         return export_path
 
     def set_export_resolution(self, resolution: Optional[ExportResolution]) -> None:
@@ -456,8 +549,13 @@ class JianyingController:
         """
         export_btn = self.app.TextControl(searchDepth=2, Compare=ControlFinder.desc_matcher("ExportOkBtn", exact=True))
         if not export_btn.Exists(0):
-            raise AutomationError("未在导出窗口中找到导出按钮")
-        export_btn.Click(simulateMove=False)
+            # Jianying 11 export dialog is a child QML window. Its primary
+            # action is consistently anchored at bottom-right.
+            rect = self.app.BoundingRectangle
+            logger.warning("Final export button missing from UIA tree; using dialog-relative click")
+            pyautogui.click(x=int(rect.right) - 130, y=int(rect.bottom) - 27, button="left")
+        else:
+            export_btn.Click(simulateMove=False)
         time.sleep(5)
 
     def __ensure_window_focus(self) -> None:
@@ -497,6 +595,22 @@ class JianyingController:
         st = time.time()
         while True:
             self.get_window()
+            expected_path = getattr(self, "_expected_export_path", "")
+            if expected_path and os.path.isfile(expected_path):
+                logger.info("Export output exists, treating render as complete: %s", expected_path)
+                # Jianying 11 may expose the success page as "exporting" and
+                # omit its close button from UIA. Close the bottom-right action
+                # so the next render is not left behind a modal.
+                if self.app_status == "pre_export":
+                    rect = self.app.BoundingRectangle
+                    pyautogui.click(
+                        x=int(rect.right) - 52,
+                        y=int(rect.bottom) - 27,
+                        button="left",
+                    )
+                    time.sleep(1)
+                export_succeeded = True
+                break
             if self.app_status != "pre_export":
                 break
 
@@ -539,6 +653,8 @@ class JianyingController:
         """
         logger.info(f"move {original_path} to {output_path}")
         if output_path is not None:
+            if not original_path:
+                raise AutomationError("导出完成但未解析到原始输出路径")
             shutil.move(original_path, output_path)
 
     def export_draft(self, draft_name: str, output_path: Optional[str] = None, *,
@@ -563,6 +679,7 @@ class JianyingController:
             `AutomationError`: 剪映操作失败
         """
         logger.info(f"start export {draft_name} to {output_path}")
+        self._current_draft_name = draft_name
 
         # 初始化准备
         self.get_window()
@@ -605,6 +722,19 @@ class JianyingController:
                     self.get_window()
                 elif self.app_sub_status == "exporting":
                     logger.info("[%d]app is already in pre_export[exporting] page", i)
+                    if original_path is None:
+                        # Jianying 11 can hide ExportOkBtn from UIA, causing
+                        # its settings page to be classified as "exporting".
+                        logger.warning(
+                            "Pre-export controls unavailable; treating first "
+                            "exporting state as Jianying 11 export settings"
+                        )
+                        original_path = self.get_original_export_path()
+                        self.set_export_resolution(resolution)
+                        self.set_export_framerate(framerate)
+                        self.click_final_export_button()
+                        self.get_window()
+                        continue
                     if self.wait_for_export_completion(timeout):
                         export_completed = True
                         self.return_to_home()
@@ -653,6 +783,12 @@ class JianyingController:
                         )
                         time.sleep(2)
                         continue
+                if self.app_sub_status == "export_start":
+                    logger.info("Closing Jianying export-start dialog with Escape")
+                    self.app.SetActive()
+                    pyautogui.press("esc")
+                    time.sleep(2)
+                    continue
                 logger.warning(
                     "switch_to_home: stuck in pre_export sub_status=%s, attempt=%d",
                     self.app_sub_status,
@@ -747,16 +883,23 @@ class JianyingController:
                 % (max_retries, retry_interval)
             )
 
-        # 寻找可能存在的导出窗口
-        export_window = self.app.WindowControl(searchDepth=1, Name="导出")
-        if self._exists_with_com_retry(
-            export_window,
-            "get_window.find_export",
-            timeout=0,
-            raise_on_exhausted=False,
-        ):
-            self.app = export_window
+        # Jianying 11 renders the export UI as an overlay inside MainWindow,
+        # while older releases expose a child Window named "导出".
+        if self._main_window_has_export_overlay():
             self.app_status = "pre_export"
+        else:
+            export_window = self.app.WindowControl(
+                searchDepth=1,
+                Compare=self._export_window_cmp,
+            )
+            if self._exists_with_com_retry(
+                export_window,
+                "get_window.find_export",
+                timeout=0,
+                raise_on_exhausted=False,
+            ):
+                self.app = export_window
+                self.app_status = "pre_export"
 
         # 初始化导出子状态
         self.init_export_sub_status()
@@ -765,6 +908,41 @@ class JianyingController:
 
         self.app.SetActive()
         self.app.SetTopmost()
+
+    def _main_window_has_export_overlay(self) -> bool:
+        """Return whether a Jianying 11-style inline export overlay is open."""
+        markers = (
+            ("ExportOkBtn", 2, True),
+            ("ExportPath", 2, False),
+            ("ExportSucceedCloseBtn", 3, False),
+        )
+        for marker, depth, exact in markers:
+            control = self.app.TextControl(
+                searchDepth=depth,
+                Compare=ControlFinder.desc_matcher(marker, depth=depth, exact=exact),
+            )
+            if self._exists_with_com_retry(
+                control,
+                f"get_window.find_inline_export.{marker}",
+                timeout=0,
+                raise_on_exhausted=False,
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _export_window_cmp(control: uia.Control, depth: int) -> bool:
+        """Match legacy ``导出`` and Jianying 11 ``导出-<draft>`` windows."""
+        if depth != 1:
+            return False
+        try:
+            name = (control.Name or "").strip()
+            class_name = (control.ClassName or "").lower()
+        except Exception as exc:
+            if is_com_uia_error(exc):
+                return False
+            raise
+        return name == "导出" or name.startswith("导出-") or "exportwindow" in class_name
 
     # 初始化导出子状态
     def init_export_sub_status(self) -> None:
